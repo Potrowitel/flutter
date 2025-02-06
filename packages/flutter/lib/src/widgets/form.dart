@@ -233,6 +233,9 @@ class FormState extends State<Form> {
   bool _hasInteractedByUser = false;
   final Set<FormFieldState<dynamic>> _fields = <FormFieldState<dynamic>>{};
 
+  // Indicates whether the form has been manually validated for the first time.
+  bool _initialManualValidated = false;
+
   // Called when a form field has changed. This will cause all form fields
   // to rebuild, useful if form fields have interdependencies.
   void _fieldDidChange() {
@@ -275,6 +278,10 @@ class FormState extends State<Form> {
         _validate();
       case AutovalidateMode.onUserInteraction:
         if (_hasInteractedByUser) {
+          _validate();
+        }
+      case AutovalidateMode.postValidationInteraction:
+        if (_hasInteractedByUser && !_initialManualValidated) {
           _validate();
         }
       case AutovalidateMode.onUnfocus:
@@ -322,6 +329,7 @@ class FormState extends State<Form> {
     for (final FormFieldState<dynamic> field in _fields) {
       field.reset();
     }
+    _initialManualValidated = true;
     _hasInteractedByUser = false;
     _fieldDidChange();
   }
@@ -336,6 +344,7 @@ class FormState extends State<Form> {
   /// but instead returns a [Set] of fields with errors.
   bool validate() {
     _hasInteractedByUser = true;
+    _initialManualValidated = false;
     _forceRebuild();
     return _validate();
   }
@@ -565,6 +574,9 @@ class FormFieldState<T> extends State<FormField<T>> with RestorationMixin {
   final RestorableBool _hasInteractedByUser = RestorableBool(false);
   final FocusNode _focusNode = FocusNode();
 
+  // Indicates whether the form has been manually validated for the first time.
+  bool _initialManualValidated = true;
+
   /// The current value of the form field.
   T? get value => _value;
 
@@ -608,6 +620,7 @@ class FormFieldState<T> extends State<FormField<T>> with RestorationMixin {
     setState(() {
       _value = widget.initialValue;
       _hasInteractedByUser.value = false;
+      _initialManualValidated = true;
       _errorText.value = null;
     });
     Form.maybeOf(context)?._fieldDidChange();
@@ -624,6 +637,7 @@ class FormFieldState<T> extends State<FormField<T>> with RestorationMixin {
   bool validate() {
     setState(() {
       _validate();
+      _initialManualValidated = false;
     });
     return !hasError;
   }
@@ -715,6 +729,10 @@ class FormFieldState<T> extends State<FormField<T>> with RestorationMixin {
           if (_hasInteractedByUser.value) {
             _validate();
           }
+        case AutovalidateMode.postValidationInteraction:
+          if (_hasInteractedByUser.value && !_initialManualValidated) {
+            _validate();
+          }
         case AutovalidateMode.onUnfocus:
         case AutovalidateMode.disabled:
           break;
@@ -756,6 +774,12 @@ enum AutovalidateMode {
   /// Used to auto-validate [Form] and [FormField] only after each user
   /// interaction.
   onUserInteraction,
+
+  /// Used to auto-validate [Form] and [FormField] only after user interaction,
+  /// but stops auto-validating after the first manual validation (e.g., form submission).
+  /// This is useful when you want to show errors only after the user has attempted
+  /// to submit the form once.
+  postValidationInteraction,
 
   /// Used to auto-validate [Form] and [FormField] only after the field has
   /// lost focus.
